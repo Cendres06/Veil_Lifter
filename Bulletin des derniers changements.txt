@@ -1,0 +1,83 @@
+1. Nouvelles fonctions et classes :
+	. Ajout d'exceptions personnalisées
+	. Ajout des éléments issus et modifiés de Sherlock (https://github.com/foundation-int-tech-team/sherlock) qui utilisent Scrapy pour récupérer les données wikidot obtenues par requête ajax.
+	. "path_extension" qui sert à créer automatiquement un lien viable vers le document spécifis, et de récupérer son contenu en option si le fichier est en .csv
+	. "nettoyage_html" qui récupère le texte d'un objet BS4 sans l'HTML
+	. "setup_lien" qui transforme un slug de page en un lien url viable. Fonctionne aussi avec les liens entiers en guise de slug. Domaine du site en paramètre facultatif. Peut rendre la page listant les tags si le domaine spécifié est "tag". Renvoie une exception si le nom de domaine est invalide ou si l'id en paramètre est invalide.
+	. "comptage_liste_tag" qui sert à compter le nombre de pages différentes pour la liste répertoriant les textes d'un tag.
+	. "recup_toutes_pages_avec_tag" : anciennement "recup_page_avec_tag"
+	. "orga_credits_fr" : anciennement "ordonnance_credits"
+	. "bd_credits_fr" : anciennement "creation_bds_fr"
+	. "liste_text_ok_fr_TO_json": transforme la liste des ressources de travail en un dictionnaire json. Actuellement inutile. Laissée pour le confort de l'utilisateur.
+	. "recup_donnees_ajax" : lance la procédure de crawl de la Spider modifiée de Sherlock. Pour l'instant, échoue à récupérer la date de création.
+	. "ordonnance_metadonnees" : récupère les métadonnées propres à la page. Pour l'instant, ne comprend pas l'auteur (tba) ni la date de création (bug). Comprend le titre, le slug et le score d'un texte.
+	. "bd_metadonnees_fr" : importe en .csv les métadonnées des textes de travail
+	. "triple_vote" : calcule le score d'un texte à partir d'un tuple de dimension 3 contenant l'id de page (slug), le signe du vote (+,-ou None) et la string de chiffres indiquant le vote.
+	. "extreme_date" : calcule l'âge le plus élevé ou faible dans un échantillon de textes selon le besoin exprimé par l'utilisateur. Si l'utilisateur veut augmenter la moyenne d'âge de l'échantillon, la fonction retourne l'âge le plus petit. Sinon, la fonction retourne l'âge le plus grand.
+	. "moyenne_date" : calcule la moyenne d'âge d'un échantillon de textes
+	. "echantillon_textes_representatifs_fr" : crée un échantillon des k textes les plus populaires en essayant de maintenir une moyenne d'âge spécifiée par l'utilisateur, avec une marge d'erreur. Ne fonctionne pas pour l'instant si la taille k de l'échantillon plus haute que 60. La fonction propose à l'utilisateur une fonction de recherche avancée qui n'a pas encore été implantée.
+
+2. Fonctions modifiées :
+	"recup_page" -> 
+		. passage de lxml+regex à Bs4
+		. exception si page inexistante
+	"recup_page_avec_tag" -> 
+		. renommée "recup_toutes_pages_avec_tag"
+		. passage de lxml+regex à Bs4
+		. contenu de "verif_onglets" intégré
+	"recup_tag" ->
+		. passage de lxml+regex à Bs4
+	"ressources_de_travail" ->
+		. passage de lxml+regex à Bs4
+		. correction d'un oubli de vérification des tags interdits
+		. ajout d'une possibilité de débugage étape par étape avec ayant pour valeurs possibles False, True ou "SEVERE"
+		. exclusion des pages system et deleted
+		. possibilité d'exclure certains textes récupérés même s'ils correspondent aux critères demander, pour une meilleure personalisation des ressources de travail
+	"normalisation_date"->
+		. prend aussi en charge le format %Y-%m-%d désormais
+	"trouver_module_credit"->
+		. passage de lxml+regex à Bs4
+		. fonctionne
+		. ajout d'une possibilité de débugage étape par étape ayant pour valeurs possibles False ou True
+		. contenu de "nettoyage_module_credit" intégré
+		. Meilleur gestion des lignes indépendantes (séparées des noms de champs) et de leur attribution automatique
+	"orga_credits_fr" ->
+		. renommée "ordonnance_credits"
+		. ajout d'une possibilité de débugage étape par étape ayant pour valeurs possibles False ou True
+		. contenu de "process_pour_credits_fr" intégré
+		. possibilité de définir manuellement un comportement personnalisépour certains textes disposant de modules de crédits atypiques. Developer-friendly et non user friendly
+	"liste_textes_fr" ->
+		. paramètre de débugage dont héritent les fonctions mobilisées
+		. paramètre permettant de choisir le chemin exact où sera créé le fichier .csv
+	"creation_bd_fr" ->
+		. renommée "bd_credits_fr"
+	Récupération de texte ->
+		. passage de lxml+regex à Bs4
+		. nettoyage des balises HTML corrigé
+		. Suppression de la ligne de navigation skip avant | skip arrière lors de la récupération du texte
+		. fermeture automatique du fichier
+
+3. Fonctions supprimées :
+
+	. "verif_onglets" [intégrée dans "recup_toutes_pages_avec_tag"]
+	. "nettoyage_module_credit" [intégrée dans "trouver_module_credit"]
+	. "process_pour_credits_fr" [intégrée dans "ordonnance_credits"]
+	. "recup_page_avec_tag" [renommée "recup_toutes_pages_avec_tag"]
+	. "orga_credits_fr" [renommée "ordonnance_credits"]
+	. "creation_bds_fr" [renommée "bd_credits_fr"]
+	. "nettoyage_profondeur" [obsolète avec le passage de lxml+regex à Bs4]
+	. "champs_ok" [obsolète avec le passage de lxml+regex à Bs4]
+	. "nettoyage_profondeur" [obsolète avec le passage de lxml+regex à Bs4]
+	. "nettoyage_profondeur" [obsolète avec le passage de lxml+regex à Bs4]
+	. "nettoyage_profondeur" [obsolète avec le passage de lxml+regex à Bs4]
+	. "nettoyage_profondeur" [obsolète avec le passage de lxml+regex à Bs4]
+ 
+
+4. Fonctions à implanter :
+	
+	. "recup_page_parent" : passage de lxml+regex à Bs4à faire
+	. "liste_fragments" : a besoin de "recup_page_parent"
+	. "recup_texte_propre : passage de lxml+regex à Bs4à faire
+	. "ecriture_fichier" : non-testée avec les nouvelles versions des fonctions
+	. "creation_bd_textes_fr" : a besoin de "ecriture_fichier"
+	

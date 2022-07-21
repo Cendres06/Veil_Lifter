@@ -1,9 +1,0 @@
-setup.py
-veil_lifter/__init__.py
-veil_lifter/scrapping.py
-veil_lifter/stat_textes.py
-veil_lifter.egg-info/PKG-INFO
-veil_lifter.egg-info/SOURCES.txt
-veil_lifter.egg-info/dependency_links.txt
-veil_lifter.egg-info/top_level.txt
-veil_lifter.egg-info/zip-safe
