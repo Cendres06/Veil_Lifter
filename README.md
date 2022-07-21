@@ -1,6 +1,8 @@
 # Veil_Lifter
 Module python servant à récupérer les textes de la branche francophone et à effectuer plusieurs opérations statistiques.
 
+Ce README.md n'est PAS à jour!!!!
+
 ## **scrapping.py :** principales fonctions
 
 Pour chercher une liste de textes sur la base de leurs tags, en privilégiant la recherche par langage :
