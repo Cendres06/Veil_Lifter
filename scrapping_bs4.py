@@ -928,8 +928,7 @@ def ordonnance_metadonnees(id_page,debug=False):
     dico["Titre"]=titre[:-1]
     if debug:
         print("Etat actuel du dico :\n",dico,'\n')
-
-
+    
     #Auteurice
 
     #Date de création
@@ -1176,8 +1175,8 @@ def echantillon_textes_representatifs_fr(k=10,moy_spec=5,epsilon=1,debug=False,c
     else:
         print("Ici, faire la fonction pour chercher sur scpper")
 
-echantillon_supposé=echantillon_textes_representatifs_fr(debug=True)
-print("Résultat :")
-print(echantillon_supposé)
-print(moyenne_date(echantillon_supposé))
+#echantillon_supposé=echantillon_textes_representatifs_fr(debug=True)
+#print("Résultat :")
+#print(echantillon_supposé)
+#print(moyenne_date(echantillon_supposé))
 
