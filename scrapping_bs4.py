@@ -1,36 +1,11 @@
 from bs4 import BeautifulSoup
 import requests, re, time, http, time, datetime, unicodedata,os,json
 import pandas as pd
+from utilities import path_extension
 
 #On s'assure d'être dans le bon répertoire
 repertoire = os.path.dirname(__file__)
 os.chdir(repertoire)
-
-def path_extension(fichier,bd=True,chemin="../../",lecture=False,extension="csv"):
-    if chemin:
-        if chemin[-1] != "/":
-            if bd:
-                path=chemin + r'/bases_de_donnees/'+fichier+r'.'+extension
-            else:
-                path=chemin + r"/" + fichier+r'.'+extension
-        else:
-            if bd:
-                path = chemin + r'bases_de_donnees/'+fichier+r'.'+extension
-            else:
-                path = chemin + r"/" + fichier+r'.'+extension
-    else:
-        if bd:
-            path = r'/bases_de_donnees/'+fichier+r'.'+extension
-        else:
-            path = fichier+r'.'+extension
-    if lecture and extension=="csv":
-        dataframe = pd.read_csv(path,encoding="utf-8-sig")
-        return dataframe
-    elif lecture:
-        print("La lecture n'a pas été faite car l'extension n'est pas en csv.")
-    else:
-        return path
-
 
 #!!! Toutes les fonctions, classes et méthodes qui suivent ont été créées par Corentin POUPRY pour le projet Sherlock.
 #Le projet est sous la licence MIT (https://opensource.org/licenses/mit-license.php)
@@ -297,32 +272,39 @@ def nettoyage_html(field):
     return field.get_text()
 
 def setup_lien(id_page,domaine="http://fondationscp.wikidot.com"):
-    """Permet d'établir un lien efficace à partir d'un simple id de page. Si domaine == 'tag' retourne spécifiquement la page listant les textes avec le tag sur fr.
+    """Permet d'établir un lien efficace à partir d'un simple id de page. Si domaine == 'tag' retourne spécifiquement la page listant les textes avec le tag sur fr. Si domaine = None, pas de vérification de domaine.
     Retourne une str.
     
     id_page -> str
     domaine -> str"""
-    if re.match("tag",domaine):
-        if len(domaine) == 3:
-            lien = "http://fondationscp.wikidot.com/system:page-tags/tag/"+id_page+"#pages"
-        #Comme on a match une chaîne de taille 3 avec domaine, len(domaine)>=3 et on ne traite pas le cas "len(domaine) < 3", impossible
+    if domaine:
+        if re.match("tag",domaine):
+            if len(domaine) == 3:
+                lien = "http://fondationscp.wikidot.com/system:page-tags/tag/"+id_page+"#pages"
+            #Comme on a match une chaîne de taille 3 avec domaine, len(domaine)>=3 et on ne traite pas le cas "len(domaine) < 3", impossible
+            else:
+                lien = "http://fondationscp.wikidot.com/system:page-tags/tag/"+id_page+"/p/"+domaine[-len(domaine)+3:]
         else:
-            lien = "http://fondationscp.wikidot.com/system:page-tags/tag/"+id_page+"/p/"+domaine[-len(domaine)+3:]
+            if id_page[0]=="/":
+                lien = domaine+id_page+"/noredirect/true"
+            elif re.match(re.compile('http[s]{0,1}://'),id_page):
+                if re.match(domaine,id_page):
+                    lien = id_page
+                    if not re.search("/noredirect/true",lien):
+                        lien+="/noredirect/true"
+                else:
+                    raise Exception('Le nom du domaine ne correspond pas. Il aurait dû être : {} .'.format(domaine),"Au lieu de celà, le lien est : {}.".format(id_page))
+            elif re.match(re.compile('[a-z]'),id_page):
+                lien = domaine+"/"+id_page+"/noredirect/true"
+            else:
+                raise Exception("L'argument passé en paramètre n'est pas un id valide pour une page web de la Fondation SCP : {}.".format(id_page))
     else:
         if id_page[0]=="/":
-            lien = domaine+id_page+"/noredirect/true"
-        elif re.match("http://",id_page):
-            if re.match(domaine,id_page):
-                lien = id_page
-                if not re.search("/noredirect/true",lien):
-                    lien+="/noredirect/true"
-            else:
-                raise Exception('Le nom du domaine ne correspond pas. Il aurait dû être : {} .'.format(domaine),"Au lieu de celà, le lien est : {}.".format(id_page))
-        elif re.match(re.compile('[a-z]'),id_page):
-            lien = domaine+"/"+id_page+"/noredirect/true"
+            raise Exception('Si vous ne spécifiez pas de nom de domaine, il faut nécessaire donner un lien complet en paramètre plutôt qu\'une id_page.')
+        elif re.match("http[s]{0,1}://",id_page):
+            lien = id_page
         else:
-            raise Exception("L'argument passé en paramètre n'est pas un id valide pour une page web de la Fondation SCP : {}.".format(id_page))
-
+            raise Exception("Le lien donné n'est pas valide.")
     return lien
 
 def creer_nouveau_folder(nom,dans=os.getcwd()):
@@ -351,21 +333,28 @@ def recup_page(id_page,domaine="http://fondationscp.wikidot.com",debug=False,ful
     else:
         return ma_page_soup.find(id="main-content")
 
-
-def recup_toutes_pages_avec_tag(tag,verif_onglet=True):
+def recup_toutes_pages_avec_tag(tag,verif_onglet=True,debug=False):
     liste_id_page = []
     if type(verif_onglet)==int:
-        page_tags = recup_page(tag,domaine="tag"+str(verif_onglet))
+        if debug:
+            print("On vérifie l'onglet numéro",verif_onglet,"de la page des tags.")
+        page_tags = recup_page(tag,domaine="tag"+str(verif_onglet),debug=debug)
         liste_liens_recup = page_tags.find_all(class_="list-pages-box")[1].find_all("a")
         for lien in liste_liens_recup:
             liste_id_page.append(lien.get('href'))
     elif type(verif_onglet)!=bool:
         raise Exception("Le paramètre verif_onglet a une valeur non-usuelle : {}",format(verif_onglet))
     elif verif_onglet:
-        page_tags = recup_page(tag,domaine="tag")
+        if debug:
+            print("On analyse la page des tags :")
+        page_tags = recup_page(tag,domaine="tag",debug=debug)
         presence_onglet = page_tags.find(class_="pager")
         if presence_onglet:
-            nb_onglets = presence_onglet.find(class_="pager-no").get_text()[-1]
+            pager = presence_onglet.find(class_="pager-no").get_text()
+            nb_onglets = re.search('(?<=page 1 de )[0-9]*',pager)[0]
+            if debug:
+                print(pager)
+                print("La page a",nb_onglets,"onglets.")
             for i in range(int(nb_onglets)):
                 liste_id_page += recup_toutes_pages_avec_tag(tag,verif_onglet=i)
         else:
@@ -373,12 +362,20 @@ def recup_toutes_pages_avec_tag(tag,verif_onglet=True):
             for lien in liste_liens_recup:
                 liste_id_page.append(lien.get('href'))
     
-    return liste_id_page
+    return list(set(liste_id_page))
 
 def recup_tags(id_page):
     liste_tags = []
     ma_page = recup_page(setup_lien(id_page))
+    if not ma_page:
+        with open('logs/logs_recuptags.txt','a',encoding='utf-8') as log_file:
+            log_file.write(str(datetime.datetime.now())+" : "+id_page+" was not found.")
+        return []
     tags = ma_page.find(class_="page-tags").find_all("a")
+    if not tags:
+        with open('logs/logs_recuptags.txt','a',encoding='utf-8') as log_file:
+            log_file.write(str(datetime.datetime.now())+" : "+id_page+" has supposedly no tags.")
+        return []
     for etiquette_brut in tags:
         etiquette=etiquette_brut.get_text()
         if etiquette[0]!="_":
@@ -586,6 +583,22 @@ def ressources_de_travail(liste_tags_language=['fr'], liste_tags_format = [], li
             print("Temps de travail pour récupérer les id_pages =",end-start) 
         return(liste_finale)
 
+#textes_saphir = ressources_de_travail(liste_tags_format=['conte','scp'],liste_tags_necessaire=['saphir'],liste_tags_interdits=['expliqué','centre','annexe','fanart','aile-fr','aile-en','fragment','gazette-aleph','dans-les-coulisses'],liste_combinaisons_interdites=[('humour','scp')],debug=True)
+#textes_en = ressources_de_travail(liste_tags_language=['en'], liste_tags_format=['conte','scp'],liste_tags_interdits=['expliqué','centre','annexe','fanart','aile-fr','aile-en','fragment'],liste_combinaisons_interdites=[('humour','scp')],debug=True)
+
+def chronologie_non_organisee(ressources):
+    donnees = path_extension('bd_fr',lecture=True)
+    donnees = donnees[['id','Date de création']]
+    dates = []
+
+    for id_page in ressources:
+        ligne_bd = donnees.loc[donnees['id'] == id_page]
+        if not ligne_bd.empty:
+            date = ligne_bd['Date de création'].values[0]
+            dates.append(datetime.datetime.strptime(date[:10],"%Y-%m-%d"))
+    
+    return dates
+
 def espace_en_trop(chaine):
     """Nettoie les espaces en bordure de chaine.
     Retourne une str.
@@ -610,6 +623,8 @@ def normalisation_date(date):
     #Si c'est une phrase, comme "le 12 Juin" ou "Publié le 12"
     if not re.match(re.compile("[0-9]"),date):
         debut_date = re.search(re.compile("[0-9]"),date)
+        if debut_date==None:
+            return "Unknown"
         date = date[debut_date.start():]
     if re.match(re.compile("[0-9]{4}"),date):
         if len(date)>4:
@@ -828,16 +843,109 @@ def ordonnance_credit(id_page,debug = False,liste_exceptions_manuelles=liste_exc
 
     return dict_orga
 
+def ordonnance_credit_trad(id_page,debug = False,liste_exceptions_manuelles=[]):
+    liste_champs = ["Titre","Auteurice(s)","Traducteurice(s)","Date de création","Image & Licence","Remerciements","Commentaires","Autres"]
+    dict_orga = {"id":id_page}
+    for element in liste_champs:
+        dict_orga[element] = ""
+
+    if id_page in liste_exceptions_manuelles:
+        if debug:
+            print("On a une exception manuelle !")
+    else:
+        module_credit_propre = trouver_module_credit(id_page,debug)
+
+        #Cas module de crédit absent
+        if not module_credit_propre:
+            for champ in liste_champs:
+                dict_orga[champ]="Module de crédit absent"
+            return dict_orga
+        #Pour chaque champ du module de crédit, on fait une recherche large en expression régulière, afin de détecter automatiquement le
+        # type d'informations renseignées.
+        for champ,valeur in module_credit_propre:
+            valeur=espace_en_trop(valeur)
+            if re.search("[Tt]itre",champ):
+                dict_orga["Titre"] = unicodedata.normalize('NFKD',espace_en_trop(valeur))
+            elif re.search("([Aa]utr{0,1}(eur){0,1}(ice){0,1}s{0,1})|([EéeÉ]crit par)",champ):
+                dict_orga["Auteurice(s)"] = unicodedata.normalize('NFKD',espace_en_trop(valeur))
+            elif re.search("([Tt]raductr{0,1}(eur){0,1}(ice){0,1}s{0,1})|([Tt]raduit par)|([Tt]raduction)",champ):
+                dict_orga["Traducteurice(s)"] = unicodedata.normalize('NFKD',espace_en_trop(valeur))
+            elif re.search("[Dd]ate",champ):
+                dict_orga["Date de création"] = normalisation_date(unicodedata.normalize('NFKD',espace_en_trop(valeur)))
+            elif re.search("([I|i]mage)|([Cc]rédit)|([Ll]icence)|([Ll]égal)|([Aa]ttribution)|([Cc]ode)",champ):
+                #Comme plusieurs champs différents peuvent se qualifier, on s'assure qu'ils seront ajoutés les uns à la suite des autres.
+                if dict_orga["Image & Licence"]!="":
+                    dict_orga["Image & Licence"] += " " + unicodedata.normalize('NFKD',espace_en_trop(valeur))
+                else:
+                    dict_orga["Image & Licence"] = unicodedata.normalize('NFKD',espace_en_trop(valeur))
+            elif re.search("[Rr]emerciement",champ):
+                if dict_orga["Remerciements"]!="":
+                    dict_orga["Remerciements"] += " " + unicodedata.normalize('NFKD',espace_en_trop(valeur))
+                else:
+                    dict_orga["Remerciements"] = unicodedata.normalize('NFKD',espace_en_trop(valeur))
+                dict_orga["Remerciements"] = unicodedata.normalize('NFKD',espace_en_trop(valeur))
+            elif re.search("([Nn]ote)|([Cc]ommentaire)|([Rr]emarque)",espace_en_trop(valeur)):
+                if dict_orga["Commentaires"]!="":
+                    dict_orga["Commentaires"] += " " + unicodedata.normalize('NFKD',espace_en_trop(valeur))
+                else:
+                    dict_orga["Commentaires"] = unicodedata.normalize('NFKD',espace_en_trop(valeur))
+            else:
+                if dict_orga["Autres"]!="":
+                    dict_orga["Autres"] += " " + unicodedata.normalize('NFKD',espace_en_trop(valeur))
+                else:
+                    dict_orga["Autres"] = unicodedata.normalize('NFKD',espace_en_trop(valeur))
+
+    #Tout champ laissé vide est marqué comme tel
+    for champ in liste_champs:
+        if dict_orga[champ]=="":
+            dict_orga[champ]="Non-assigné"
+
+    return dict_orga
+
 def liste_textes_fr(chemin="../../",debug=False):
     """Fait la liste des contes et rapports francophones.
     Retourne une list[str(format id_page)]"""
-    liste_textes_ok_fr = ressources_de_travail(liste_tags_language=['fr'], liste_tags_format=['conte','scp'],liste_tags_interdits=['expliqué','centre','annexe','fanart','aile-fr','aile-en','fragment','gazette-aleph','dans-les-coulisses'],liste_combinaisons_interdites=[('humour','scp')],debug=debug)
+    liste_textes_ok_fr = ressources_de_travail(liste_tags_language=['fr'], liste_tags_format=['conte','scp'],liste_tags_interdits=['expliqué','centre','annexe','fanart','aile-fr','aile-en','fragment','gazette-aleph','dans-les-coulisses','archivé'],liste_combinaisons_interdites=[('humour','scp')],debug=debug)
     liste_textes_ok_fr = pd.DataFrame(liste_textes_ok_fr,columns=["Id_page"])
     creer_nouveau_folder("bases_de_donnees")
     path = path_extension("liste_id_pages",chemin)
     liste_textes_ok_fr.to_csv(path,index=False,encoding="utf-8-sig")
     
     return(liste_textes_ok_fr)
+
+#liste_textes_fr(debug=True)
+
+def liste_textes_en_trad(chemin="../../",debug=False):
+    """Fait la liste des contes et rapports anglophones traduits.
+    Retourne une list[str(format id_page)]"""
+    liste_textes_ok_en_trad = ressources_de_travail(liste_tags_language=['en'], liste_tags_format=['conte','scp'],liste_tags_interdits=['expliqué','centre','annexe','fanart','aile-fr','aile-en','fragment','archivé'],liste_combinaisons_interdites=[('humour','scp')],debug=debug)
+    liste_textes_ok_en_trad = pd.DataFrame(liste_textes_ok_en_trad,columns=["Id_page"])
+    creer_nouveau_folder("bases_de_donnees")
+    creer_nouveau_folder("en_trad",dans=os.getcwd()+'/bases_de_donnees')
+    path = path_extension("en_trad/liste_id_pages",chemin)
+    liste_textes_ok_en_trad.to_csv(path,index=False,encoding="utf-8-sig")
+    
+    return(liste_textes_ok_en_trad)
+
+#liste_textes_en_trad(debug=True)
+
+def bd_credits_en_trad(màj_liste = False, chemin="../../", debug=False):
+    if màj_liste:
+        liste_textes_ok = liste_textes_en_trad(chemin=chemin,debug=debug)
+    else:
+        liste_textes_ok = path_extension("/en_trad/liste_id_pages",chemin,lecture=True)
+    
+    bd_textes_en = pd.DataFrame(columns=["id","Titre","Auteurice(s)","Traducteurice(s)","Date de création","Image & Licence","Remerciements","Commentaires","Autres"])
+    for i in range(0,len(liste_textes_ok.index)):
+        id_page = liste_textes_ok.loc[i,:][0]
+        if debug:
+            print("Etape de la mise en forme :",id_page)
+        credit_orga = ordonnance_credit_trad(id_page)
+        bd_textes_en.loc[id_page] = pd.Series(credit_orga)
+    path = path_extension('/en_trad/bd_en',chemin)
+    bd_textes_en.to_csv(path, index=False,encoding="utf-8-sig")
+
+#bd_credits_fr(chemin="../../")
 
 def bd_credits_fr(màj_liste = False, chemin="../../", debug=False):
     if màj_liste:
@@ -854,8 +962,6 @@ def bd_credits_fr(màj_liste = False, chemin="../../", debug=False):
         bd_textes_fr.loc[id_page] = pd.Series(credit_orga)
     path = path_extension('bd_fr',chemin)
     bd_textes_fr.to_csv(path, index=False,encoding="utf-8-sig")
-
-#bd_credits_fr(màj_liste=True,chemin="../../")
 
 def liste_text_ok_fr_TO_json(màj_liste = False,fichier="data",chemin=None,debug=False):
     if màj_liste:
@@ -1004,10 +1110,16 @@ def triple_vote(triple):
     id_page,signe,vote = triple
     if vote=="0":
         return 0
-    elif signe=="+":
-        return id_page,int(vote)
+    elif signe in ['+','',None]:
+        if '.' in vote:
+            return id_page,float(vote)
+        else:
+            return id_page,int(vote)
     else:
-        return id_page,-int(vote) 
+        if '.' in vote:
+            return id_page,-float(vote)
+        else:
+            return id_page,-int(vote) 
 
 def extreme_date(echantillon,besoin,textes_dates_credit = pd.DataFrame()):
     if textes_dates_credit.empty:
@@ -1025,7 +1137,6 @@ def extreme_date(echantillon,besoin,textes_dates_credit = pd.DataFrame()):
         besoin="-"
     else:
         raise Exception("La fonction n'a pas compris si vous vouliez trouver l'extrême supérieur ou inférieur. Quatre symboles sont compatibles avec la fonction : {+ ou -}, {True ou False},{> ou <},{sup ou inf}.")
-    
 
     return dates_echantillon[0],besoin
 
@@ -1036,11 +1147,17 @@ def moyenne_date(ids_pages,textes_dates_credit = pd.DataFrame()):
     for id_page in ids_pages:
         date = normalisation_date(textes_dates_credit.loc[textes_dates_credit["id"]==id_page]["Date de création"].values[0][:10])
         datetimeList.append(date)
-    moyenne=int(datetime.datetime.strftime(datetime.datetime.fromtimestamp(sum(map(datetime.datetime.timestamp,datetimeList))/len(datetimeList)),"%Y"))
-    moyenne = int(datetime.datetime.now().year) - moyenne
-    return moyenne
+    moyenne = 0
+    for date_crea in datetimeList:
+        today = datetime.datetime.now()
+        age = today - date_crea
+        age = age.days / 365.2425
+        moyenne+=age
+    
+    return round(moyenne/len(datetimeList),2)
 
 def echantillon_textes_representatifs_fr(k=10,moy_spec=5,epsilon=1,debug=False,chemin="../../"):
+    """Sans doute bugguée au niveau des epsilons et des tests"""
     if k <= 60:
         page_panels = recup_page("/top-rated-pages")
 
@@ -1063,7 +1180,7 @@ def echantillon_textes_representatifs_fr(k=10,moy_spec=5,epsilon=1,debug=False,c
             #fin debug
             liste_data += re.findall(pattern_id_vote,chaine_à_regex)
         if debug:
-            print("\nVoici les données brutes récupérés :")
+            print("\nVoici les données brutes récupérées :")
             print(liste_data,"\n")
         if len(liste_data)!=60:
             if debug:
@@ -1089,12 +1206,6 @@ def echantillon_textes_representatifs_fr(k=10,moy_spec=5,epsilon=1,debug=False,c
                 print("Voici les données organisées :")
                 print(liste_data,"\n")
 
-            liste_data.sort(key=lambda x:x[1],reverse=True)
-
-            if debug:
-                print("On ordonne par popularité :")
-                print(liste_data,"\n")
-
             textes_dates_credit=pd.DataFrame()
             echantillon = [id_page for id_page,_ in liste_data[:k]]
             moyenne = moyenne_date(echantillon)
@@ -1105,7 +1216,7 @@ def echantillon_textes_representatifs_fr(k=10,moy_spec=5,epsilon=1,debug=False,c
                 print("Cet échantillon a une moyenne d'ancienneté de :",moyenne,"année(s).\n")
             
             if abs(moy_spec-moyenne)<=epsilon:
-                return(echantillon)
+                return(echantillon,moyenne)
             else:
                 best = (echantillon,moyenne)
                 if moyenne <= moy_spec-epsilon:
@@ -1129,7 +1240,7 @@ def echantillon_textes_representatifs_fr(k=10,moy_spec=5,epsilon=1,debug=False,c
                             new_moyenne = moyenne_date(new_echantillon,textes_dates_credit)
                             #On vérifie si notre nouvel échantillon est valide
                             if abs(moy_spec-new_moyenne)>=epsilon:
-                                return(new_echantillon)
+                                return(new_echantillon,new_moyenne)
                             #On vérifie si notre nouvel échantillon est meilleur que le précédent
                             elif abs(moy_spec-new_moyenne)<abs(moy_spec-best[1]):
                                 best = (new_echantillon,new_moyenne)
@@ -1149,7 +1260,7 @@ def echantillon_textes_representatifs_fr(k=10,moy_spec=5,epsilon=1,debug=False,c
                             new_moyenne = moyenne_date(new_echantillon,textes_dates_credit)
                             #On vérifie si notre nouvel échantillon est valide
                             if abs(moy_spec-new_moyenne)<=epsilon:
-                                return(new_echantillon)
+                                return(new_echantillon,new_moyenne)
                             #On vérifie si notre nouvel échantillon est meilleur que le précédent
                             elif abs(moy_spec-new_moyenne)<abs(moy_spec-best[1]):
                                 best = (new_echantillon,new_moyenne)
@@ -1160,23 +1271,411 @@ def echantillon_textes_representatifs_fr(k=10,moy_spec=5,epsilon=1,debug=False,c
             #On a pas réussi à trouver un échantillon valide avec l'epsilon spécifié, alors on propose le prochain meilleur
             print("Malheureusement les pages les plus populaires ne permettent pas d'obtenir une moyenne d'ancienneté de",str(moy_spec)+",","même avec une marge d'erreur de ",epsilon,"année(s).")
             print("Le meilleur échantillon trouvé a une moyenne d'ancienneté de",best[1],"qui implique de revoir la marge d'erreur à",abs(moy_spec-best[1]),"année(s).")
-            print("Le programme peut également aller chercher un ensemble de texte remplissant la condition première sur https://scpper.com/, mais cela prendra plus de temps.")
+            print("Le programme peut également aller chercher un ensemble de textes remplissant la condition première dans nos bases de données, mais cela prendra plus de temps.")
             print("Voulez-vous utiliser le meilleur échantillon (y), affiner la recherche (c), ou abandonner la tâche (n) ?")
             ask = input("y/c/n :")
             while ask not in ["y","c","n"]:
                 ask = input("y/c/n :")
             if ask=="y":
-                return best[0]
+                return best
             elif ask=="n":
                 return None
             else:
                 print("Ici, faire la fonction pour chercher sur scpper")
 
+    elif k>600:
+        raise Exception("L'échantillon demandé est trop grand.")
     else:
         print("Ici, faire la fonction pour chercher sur scpper")
 
-#echantillon_supposé=echantillon_textes_representatifs_fr(debug=True)
+#echantillon_supposé=echantillon_textes_representatifs_fr()
 #print("Résultat :")
 #print(echantillon_supposé)
 #print(moyenne_date(echantillon_supposé))
+
+def echantillon_textes_representatifs_fr_depuis_atelier(k=10,moy_spec=5,epsilon=0.1,debug=False,chemin="../../"):
+    #Amélioration : remplacer dans l'échantillon en -i, de cette manière, mon best_local sera plus généralement un remplacement des textes les plus faibles en popularité
+    #   
+    if k>600:
+        raise Exception("L'échantillon demandé est trop grand. Il faut changer manuellement le nombre de pages récupérées dans l'atelier.")
+    else:
+        page_atelier = recup_page('/atelier-de-drcendres')
+        pager = page_atelier.find(class_='pager-no')
+        if pager:
+            nb_onglets = int(re.search(re.compile('[0-9]+(?=<)'),str(pager))[0])
+        else:
+            nb_onglets = 1
+        
+        liste_data = []
+
+        for i in range(nb_onglets):
+            lien = setup_lien('/atelier-de-drcendres/p/'+str(i+1))
+            page_onglet = recup_page(lien)
+            tableau = page_onglet.find(class_='list-pages-box')
+            lignes_tableau = tableau.find_all('tr')
+            for ligne in lignes_tableau[1:]:
+                id_vote = re.search(re.compile("(?<=href=\").+(?=\">)"),str(ligne))
+                vote = re.search(re.compile('(?<=>)(\+|-|)([0-9.]+)(?=<)'),str(ligne))
+                signe = vote.group(1)
+                score = vote.group(2)
+                liste_data.append((id_vote[0],signe,score))
+            
+        if debug:
+            print("On importe les textes ok...")
+        liste_textes_ok_fr=path_extension("liste_id_pages",chemin,lecture=True)
+        if debug:
+            print("Importation réussie.")
+
+        liste_data = [triple_vote(triple) for triple in liste_data if triple[0] in liste_textes_ok_fr.values]
+
+        textes_dates_credit = None
+        if debug:
+            print("Voici les données organisées :")
+            print(liste_data,"\n")
+
+        liste_data.sort(key=lambda x:x[1],reverse=True)
+
+        if debug:
+            print("On ordonne par popularité :")
+            print(liste_data,"\n")
+
+        textes_dates_credit=pd.DataFrame()
+        echantillon = [id_page for id_page,_ in liste_data[:k]]
+        moyenne = moyenne_date(echantillon)
+
+        if debug:
+            print("On sélectionne les",k,"premières pages les plus populaires :")
+            print(echantillon,"\n")
+            print("Cet échantillon a une moyenne d'ancienneté de :",moyenne,"année(s).\n")
+        
+        if epsilon >= moy_spec:
+            range_acceptable = (0,moy_spec+epsilon)
+        else:
+            range_acceptable = (moy_spec-epsilon,moy_spec+epsilon)
+
+        if range_acceptable[0]<=moyenne<=range_acceptable[1]:
+            if debug:
+                print('Cas où on trouve tout de suite :')
+                print('Comme on cherche une ancienneté de',moy_spec,'années avec une marge d\'erreur de',epsilon,'années, la moyenne',moyenne,'nous va !')
+            return(echantillon,moyenne)
+        else:
+            best = (echantillon,moyenne)
+            if moyenne < range_acceptable[0]:
+                besoin = "+"
+            else:
+                besoin = "-"
+        for id_page,_ in liste_data[k:]:
+            if textes_dates_credit.empty:
+                textes_dates_credit=path_extension('bd_fr',lecture=True)[["id","Date de création"]]
+            date = int(normalisation_date(textes_dates_credit.loc[textes_dates_credit["id"]==id_page]["Date de création"].values[0][:10]).year)
+            date_extreme,besoin = extreme_date(best[0],besoin,textes_dates_credit)
+            best_local = None
+            if (besoin=="+" and date_extreme<date):
+                for i in range(k):
+                    if int(normalisation_date(textes_dates_credit.loc[textes_dates_credit["id"]==best[0][i]]["Date de création"].values[0][:10]).year)<date:
+                        if i == 0:
+                            new_echantillon = [id_page] + best[0][1:]
+                        elif i == len(best[0])-1:
+                            new_echantillon = best[0][:k-1] + [id_page]
+                        else:
+                            new_echantillon = best[0][:i] + [id_page] + best[0][i+1:]
+                        new_moyenne = moyenne_date(new_echantillon,textes_dates_credit)
+                        #On vérifie si notre nouvel échantillon est valide
+                        if range_acceptable[0] <= new_moyenne <= range_acceptable[1]:
+                            if debug:
+                                print('Cas où on trouve en cherchant à monter la moyenne :')
+                                print('Comme on cherche une ancienneté de',moy_spec,'années avec une marge d\'erreur de',epsilon,'années, la moyenne',new_moyenne,'nous va !')
+                            return (new_echantillon,new_moyenne)
+                        #On vérifie si notre nouvel échantillon est meilleur que le précédent
+                        elif not best_local or abs(moy_spec-new_moyenne)<abs(moy_spec-best_local[1]):
+                            best_local = (new_echantillon,new_moyenne)
+                            if new_moyenne < range_acceptable[0]:
+                                besoin = "+"
+                            else:
+                                besoin = "-"
+                if best_local and abs(moy_spec-best_local[1])<abs(moy_spec-best[1]):
+                    best = best_local
+            elif(besoin=="-" and date_extreme>date):
+                for i in range(k):
+                    if int(normalisation_date(textes_dates_credit.loc[textes_dates_credit["id"]==best[0][i]]["Date de création"].values[0][:10]).year)<date:
+                        if i == 0:
+                            new_echantillon = [id_page] + best[0][1:]
+                        elif i == len(best[0])-1:
+                            new_echantillon = best[0][:k-1] + [id_page]
+                        else:
+                            new_echantillon = best[0][:i] + [id_page] + best[0][i+1:]
+                        new_moyenne = moyenne_date(new_echantillon,textes_dates_credit)
+                        #On vérifie si notre nouvel échantillon est valide
+                        if range_acceptable[0] <= new_moyenne <= range_acceptable[1]:
+                            if debug:
+                                print('Cas où on trouve en cherchant à baisser la moyenne :')
+                                print('Comme on cherche une ancienneté de',moy_spec,'années avec une marge d\'erreur de',epsilon,'années, la moyenne',new_moyenne,'nous va !')
+                            return (new_echantillon,new_moyenne)
+                        #On vérifie si notre nouvel échantillon est meilleur que le précédent
+                        elif not best_local or abs(moy_spec-new_moyenne)<abs(moy_spec-best_local[1]):
+                            best_local = (new_echantillon,new_moyenne)
+                            if new_moyenne <= range_acceptable[0]:
+                                besoin = "+"
+                            else:
+                                besoin = "-"
+                if best_local and abs(moy_spec-best_local[1])<abs(moy_spec-best[1]):
+                    best = best_local
+        #On a pas réussi à trouver un échantillon valide avec l'epsilon spécifié, alors on propose le prochain meilleur
+        print("Malheureusement les pages les plus populaires ne permettent pas d'obtenir une moyenne d'ancienneté de",str(moy_spec)+",","même avec une marge d'erreur de ",epsilon,"année(s).")
+        print("Le meilleur échantillon trouvé a une moyenne d'ancienneté de",best[1],"qui implique de revoir la marge d'erreur à",abs(moy_spec-best[1]),"année(s).")
+        print("Voulez-vous utiliser le meilleur échantillon (y) ou abandonner la tâche (n) ?")
+        ask = input("y/n :")
+        while ask not in ["y","n"]:
+            ask = input("y/n :")
+        if ask=="y":
+            return best
+        else:
+            return None
+
+#print(echantillon_textes_representatifs_fr_depuis_atelier(epsilon=0.1))
+
+def recup_page_parent(id_page):
+    body_texte = recup_page(id_page)
+    miette_de_pains = body_texte.find(id="breadcrumbs")
+    #On récupère le fil d'Ariane
+    id_page_parent = miette_de_pains.find("a").get("href")
+    return(id_page_parent)
+
+def liste_fragments(liste_textes_ok=pd.DataFrame(), chemin="../../",nom_bd = 'fragments', liste_paramètres=[['fr'],[],['fragment'],[],[]],debug=False):
+    if liste_textes_ok.empty:
+        if chemin !="../../":
+            liste_textes_ok = path_extension("liste_id_pages",False,lecture=True,chemin=chemin)
+        else:
+            liste_textes_ok = path_extension("liste_id_pages",lecture=True,chemin=chemin)
+        liste_textes_ok = [id_page[0] for id_page in liste_textes_ok.values]
+    if debug:
+        print("Liste textes ok :")
+        print(liste_textes_ok)
+        if debug=="SEVERE":
+            input('Appuyez sur votre clavier pour continuer le débugage :')
+    liste_fragments_fr = ressources_de_travail(liste_paramètres[0], liste_tags_format=liste_paramètres[1], liste_tags_necessaire=liste_paramètres[2], liste_tags_interdits=liste_paramètres[3], liste_combinaisons_interdites=liste_paramètres[4],debug=debug)
+    liste_parents_ok = []
+    liste_fragments_ok = []
+    #On vérifie ensuite qu'il y a bien une correspondance entre nos textes étudiés et les fragments candidats
+    for id_page in liste_fragments_fr:
+        if debug:
+            print("On cherche la page_parent de :",id_page)
+        id_parent = recup_page_parent(id_page+'/noredirect/true')
+        #Si le parent figure dans les textes étudiés, on ajoute le fragment dans notre base de donnée
+        if id_parent in liste_textes_ok:
+            if debug:
+                print("On garde cette page !")
+            liste_fragments_ok.append([id_page,id_parent])
+            if not id_parent in liste_parents_ok:
+                liste_parents_ok.append(id_parent)
+    
+    creer_nouveau_folder(chemin+"bases_de_donnees")
+
+    if debug:
+        print(liste_fragments_ok)
+        print(liste_parents_ok)
+
+    #Création des bases de données
+    liste_fragments_ok = pd.DataFrame(data=liste_fragments_ok,columns=["Id_page","Id_parent"])
+    if debug:
+        print(liste_fragments_ok)
+    
+    if chemin !="../../":
+        liste_fragments_ok.to_csv(chemin+nom_bd+'_a_retenir.csv',encoding="utf-8-sig")
+    else:
+        liste_fragments_ok.to_csv(chemin+"bases_de_donnees/"+nom_bd+'_a_retenir.csv',encoding="utf-8-sig")
+
+    liste_parents_fr = pd.DataFrame(data=liste_parents_ok,columns=["Id_page"])
+    if debug:
+        print(liste_parents_fr)
+    if chemin !="../../":
+        liste_parents_fr.to_csv(chemin+'parents_de_'+nom_bd+'_a_retenir.csv',encoding="utf-8-sig")
+    else:
+        liste_parents_fr.to_csv(chemin+"bases_de_donnees/"+'parents_de_'+nom_bd+'_a_retenir.csv',encoding="utf-8-sig")
+    return(liste_fragments_ok,liste_parents_fr)
+
+#liste_fragments(nom_bd="annexes",liste_paramètres=[['fr'],[],['annexe'],[],[]],debug=True)
+#liste_fragments(nom_bd="fragments",liste_paramètres=[['fr'],[],['fragment'],[],[]],debug=True)
+
+def recup_texte_propre(id_page):
+    """Récupère le texte nettoyé de tout html.
+    Retourne un list[str].
+    
+    id_page -> str, format id_page"""
+    body_texte = recup_page(id_page).find(id="page-content")
+    #On veut chopper les éventuels i_frame contenant du texte : cas de /proposition-des-drs-gemini-et-tesla
+    i_frames = body_texte.find_all(class_='html-block-iframe')
+    if i_frames:
+        for iframe in i_frames:
+            lien = 'http://fondationscp.wdfiles.com/local--html'+re.sub(re.compile('/html'),'',iframe['src'])+'/fondationscp.wikidot.com/'
+            new_content = recup_page(lien,domaine=None,full=True).text
+            iframe.string = new_content
+    #On vérifie qu'on ne prend pas les thèmes CSS :
+    theme_css = body_texte.find(class_="code")
+    if theme_css:
+        theme_css.decompose()
+
+    footwalk_nav = body_texte.find(class_="footer-wikiwalk-nav")
+    if footwalk_nav:
+        footwalk_nav.decompose()
+
+    module_credit=body_texte.find(class_="modal-wrapper creditRate")
+    if not module_credit:
+        #On utilise alors du regex pour être sûr de bien supprimer le module de crédit
+        body_texte_str = str(body_texte)
+        pos_credit = re.search(re.compile("<\/ul>"),body_texte_str)
+        if pos_credit:
+            body_texte_str = body_texte_str[pos_credit.end():]
+            pattern_balise = re.compile("<\/{0,1}.*?>")
+            texte = re.sub(pattern_balise,"",body_texte_str)
+        else:
+            texte = body_texte.text
+    else:
+        module_credit.decompose()
+        texte = body_texte.text
+
+    texte = re.sub('🗿','',texte)
+
+    return texte
+
+def slug_to_nom_fichier(slug,extension = 'txt'):
+    nom_fichier = ""
+    #Certains caractères URL étant impossibles à insérer dans un nom de fichier ou de document, on les supprime
+    for char in slug[1:]:
+        if char not in ["/","\\","\"","<",">",":","|","*","?"]:
+            nom_fichier += char
+    if extension:
+        nom_fichier += "." + extension
+    return nom_fichier
+
+def ecriture_fichier(id_page,folder='/textes_fr/',chemin="../../",debug=False):
+    """Crée ou écrase un fichier.txt avec le texte d'une page précise.
+    Ne retourne rien.
+    
+    id_page -> str, format id_page
+    folder -> str
+    
+    Ne fonctionne QUE si les bases de données des annexes et fragments ont déjà été créées !!!!"""
+
+    nom_fichier = slug_to_nom_fichier(id_page)
+    path = chemin+folder+nom_fichier
+    if debug:
+        print("Chemin du fichier :",path)
+    #On vérifie si le folder existe, sinon on le crée
+    creer_nouveau_folder(folder,dans=chemin)
+    texte= recup_texte_propre(id_page)
+    #On récupère les fragments et les annexes
+    if folder == '/textes_fr/':
+        bd_fragments = pd.read_csv(chemin+'bases_de_donnees/fragments_a_retenir.csv',index_col=0)
+        bd_parents = pd.read_csv(chemin+'bases_de_donnees/parents_de_fragments_a_retenir.csv',index_col=0)
+        bd_annexes = pd.read_csv(chemin+'bases_de_donnees/annexes_a_retenir.csv',index_col=0)
+        bd_parents_annexes = pd.read_csv(chemin+'bases_de_donnees/parents_de_annexes_a_retenir.csv',index_col=0)
+    elif folder == '/textes_en/':
+        bd_fragments = pd.read_csv(chemin+'bases_de_donnees/en_trad/fragments_a_retenir.csv',index_col=0)
+        bd_parents = pd.read_csv(chemin+'bases_de_donnees/en_trad/parents_de_fragments_a_retenir.csv',index_col=0)
+        bd_annexes = pd.read_csv(chemin+'bases_de_donnees/en_trad/annexes_a_retenir.csv',index_col=0)
+        bd_parents_annexes = pd.read_csv(chemin+'bases_de_donnees/en_trad/parents_de_annexes_a_retenir.csv',index_col=0)
+
+    #on vérifie si la page a des fragments
+    if id_page in bd_parents.values:
+        if debug:
+            print("La page a des fragments")
+        mask = (bd_fragments['Id_parent'] == id_page)
+        liste_fragments = []
+        for i in range(len(mask.values)):
+            if mask.loc[i]:
+                liste_fragments.append(bd_fragments.loc[i,"Id_page"])
+        for fragment in liste_fragments:
+            if debug:
+                print("On examine le fragment :",fragment)
+            texte += recup_texte_propre(fragment+'/noredirect/true')
+            if debug:
+                print(texte)
+    #On vérifie si la page a des annexes
+    if id_page in bd_parents_annexes.values:
+        if debug:
+            print("La page a des annexes")
+        mask = (bd_annexes['Id_parent'] == id_page)
+        liste_annexes = []
+        for i in range(len(mask.values)):
+            if mask.loc[i]:
+                liste_annexes.append(bd_annexes.loc[i,"Id_page"])
+        if debug:
+            print('Liste des annexes :',liste_annexes)
+        for annexe in liste_annexes:
+            if debug:
+                print("On examine l'annexe :",annexe)
+            texte += recup_texte_propre(annexe)
+            
+    with open(path,'w',encoding="utf-8") as file:
+        if debug:
+            print("On ouvre le fichier.")
+        file.write(texte)
+    if debug:
+        print("On ferme le fichier.")
+
+#ecriture_fichier('/verser-le-sang',debug=True)
+
+def creation_bd_textes_fr(màj_liste = False,debug=False,chemin="../../"):
+    """Importe tous les rapports et contes francophones sur lesquels travailler dans un répertoire approprié.
+    Ne retourne rien.
+    
+    màj_liste -> bool"""
+
+    if debug:
+        start = time.time()
+        print("Début de la fonction de creation de la BD FR")
+
+    if màj_liste:
+        liste_textes_ok=liste_textes_fr()
+    else:
+        liste_textes_ok = path_extension("liste_id_pages",chemin=chemin,lecture=True)
+    if debug:
+        print("La liste des textes à travailler est faite.")
+    if màj_liste:
+        liste_fragments(liste_textes_ok)
+        liste_fragments(liste_textes_ok,[],'annexes',[['fr'],[],['annexe'],[],[]])
+
+    for i in range(0,len(liste_textes_ok.index)):
+        id_page = liste_textes_ok.loc[i,:][0]
+        if debug:
+            print("Création du fichier pour :",id_page)
+        ecriture_fichier(id_page,folder='textes_en/',chemin=chemin)
+    
+    if debug:
+        end = time.time()
+        print("Temps de travail :",end-start)
+
+#creation_bd_textes_fr(debug=True)
+
+def creation_bd_textes_en(màj_liste = False,debug=False,chemin="../../bases_de_donnees/en_trad/"):
+    """Importe tous les rapports et contes anglophones traduits sur lesquels travailler dans un répertoire approprié.
+    Ne retourne rien.
+    
+    màj_liste -> bool"""
+
+    if debug:
+        start = time.time()
+        print("Début de la fonction de creation de la BD EN")
+
+    if màj_liste:
+        liste_textes_ok=liste_textes_en_trad()
+    else:
+        liste_textes_ok = path_extension("liste_id_pages",False,chemin=chemin,lecture=True)
+    if debug:
+        print("La liste des textes à travailler est faite.")
+    if màj_liste:
+        liste_fragments(liste_textes_ok,chemin='../../bases_de_donnees/en_trad',liste_paramètres=[['en'],[],['fragment'],[],[]])
+        liste_fragments(liste_textes_ok,chemin='../../bases_de_donnees/en_trad',nom_bd='annexes',liste_paramètres=[['en'],[],['annexe'],[],[]])
+
+    for i in range(0,len(liste_textes_ok.index)):
+        id_page = liste_textes_ok.loc[i,:][0]
+        if debug:
+            print("Création du fichier pour :",id_page)
+        ecriture_fichier(id_page,folder='/textes_en/',chemin='../../')
+    
+    if debug:
+        end = time.time()
+        print("Temps de travail :",end-start)
+
 
