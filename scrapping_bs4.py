@@ -959,9 +959,11 @@ def bd_credits_fr(màj_liste = False, chemin="../../", debug=False):
         if debug:
             print("Etape de la mise en forme :",id_page)
         credit_orga = ordonnance_credit(id_page,liste_exceptions_manuelles=liste_exceptions_manuelles_fr)
-        bd_textes_fr.loc[id_page] = pd.Series(credit_orga)
+        bd_textes_fr.loc[len(bd_textes_fr)] = list(credit_orga.values())
     path = path_extension('bd_fr',chemin)
-    bd_textes_fr.to_csv(path, index=False,encoding="utf-8-sig")
+    print(bd_textes_fr.loc[0])
+    print(bd_textes_fr)
+    bd_textes_fr.to_csv(path, index=False,encoding="utf-8-sig",sep=',')
 
 def liste_text_ok_fr_TO_json(màj_liste = False,fichier="data",chemin=None,debug=False):
     if màj_liste:
@@ -1640,7 +1642,7 @@ def creation_bd_textes_fr(màj_liste = False,debug=False,chemin="../../"):
         id_page = liste_textes_ok.loc[i,:][0]
         if debug:
             print("Création du fichier pour :",id_page)
-        ecriture_fichier(id_page,folder='textes_en/',chemin=chemin)
+        ecriture_fichier(id_page,folder='textes_fr/',chemin=chemin)
     
     if debug:
         end = time.time()
